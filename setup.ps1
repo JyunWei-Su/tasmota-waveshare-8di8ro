@@ -69,6 +69,12 @@ if ($LASTEXITCODE -ne 0) {
 $ErrorActionPreference = "Stop"
 
 Write-Host "[ ] Pushing to GitHub..." -NoNewline
+# Embed token in remote URL so MinGit can authenticate without prompts
+$token = & gh auth token 2>$null
+if ($token) {
+    $owner = ($REPO -split '/')[0]
+    git remote set-url origin "https://${owner}:${token}@github.com/$REPO.git"
+}
 git push -u origin main --force
 Write-Host " done" -ForegroundColor Green
 
