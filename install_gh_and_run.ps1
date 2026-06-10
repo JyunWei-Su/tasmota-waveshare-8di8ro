@@ -53,6 +53,10 @@ $env:PATH = "$ghDir\bin;$gitDir\cmd;$gitDir\bin;" + $env:PATH
 & $ghExe --version
 & $gitExe --version
 
+# Ensure token has 'workflow' scope for pushing Actions files
+Write-Host "=== Ensuring workflow scope ===" -ForegroundColor Cyan
+& $ghExe auth refresh --scopes "repo,workflow" --hostname github.com
+
 Write-Host ""
 Write-Host "=== Running setup ===" -ForegroundColor Cyan
 & "$PSScriptRoot\setup.ps1"
