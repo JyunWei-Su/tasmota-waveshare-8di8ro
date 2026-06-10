@@ -1,0 +1,236 @@
+name: Auto-build on new Tasmota release
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # daily at 03:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+permissions:
+  contents: write           # needed to create releases
+
+jobs:
+
+  # ─── 1. Check whether upstream has a release we haven't built yet ─────────
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      new_release: ${{ steps.diff.outputs.new_release }}
+      tasmota_tag:  ${{ steps.diff.outputs.tasmota_tag }}
+    steps:
+      - name: Get latest Tasmota release tag
+        id: upstream
+        run: |
+          TAG=$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/arendst/Tasmota/releases/latest \
+            | jq -r '.tag_name')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Get our latest release tag (if any)
+        id: ours
+        run: |
+          TAG=$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            | jq -r '.tag_name // "none"') || TAG="none"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Compare
+        id: diff
+        run: |
+          UPSTREAM="${{ steps.upstream.outputs.tag }}"
+          OURS="${{ steps.ours.outputs.tag }}"
+          echo "Tasmota latest : $UPSTREAM"
+          echo "Our latest     : $OURS"
+          if [ "$UPSTREAM" != "$OURS" ] && [ -n "$UPSTREAM" ]; then
+            echo "new_release=true"  >> "$GITHUB_OUTPUT"
+            echo "tasmota_tag=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          else
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+            echo "tasmota_tag=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ─── 2a. Build safeboot images (required before main images) ─────────────
+  safeboot:
+    needs: check
+    if: needs.check.outputs.new_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant:
+          - tasmota32s3-safeboot
+          - tasmota32s3ser-safeboot
+    steps:
+      - name: Clone Tasmota ${{ needs.check.outputs.tasmota_tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: arendst/Tasmota
+          ref: ${{ needs.check.outputs.tasmota_tag }}
+          fetch-depth: 1
+
+      - name: Inject user_config_override.h
+        uses: actions/checkout@v4
+        with:
+          path: _this
+          sparse-checkout: |
+            user_config_override.h
+            platformio_override.ini
+
+      - name: Copy overrides into Tasmota tree
+        run: |
+          cp _this/user_config_override.h  tasmota/user_config_override.h
+          cp _this/platformio_override.ini platformio_override.ini
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pioarduino (Tasmota's PlatformIO fork)
+        run: pip install pioarduino --break-system-packages 2>/dev/null || pip install pioarduino
+
+      - name: Build ${{ matrix.variant }}
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
+        run: platformio run -e ${{ matrix.variant }}
+
+      - name: Upload safeboot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant }}
+          path: ./build_output
+
+  # ─── 2b. Build main firmware images ──────────────────────────────────────
+  firmware:
+    needs: [check, safeboot]
+    if: needs.check.outputs.new_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant:
+          - tasmota32s3
+          - tasmota32s3ser
+    steps:
+      - name: Clone Tasmota ${{ needs.check.outputs.tasmota_tag }}
+        uses: actions/checkout@v4
+        with:
+          repository: arendst/Tasmota
+          ref: ${{ needs.check.outputs.tasmota_tag }}
+          fetch-depth: 1
+
+      - name: Inject user_config_override.h & platformio_override.ini
+        uses: actions/checkout@v4
+        with:
+          path: _this
+          sparse-checkout: |
+            user_config_override.h
+            platformio_override.ini
+
+      - name: Copy overrides into Tasmota tree
+        run: |
+          cp _this/user_config_override.h  tasmota/user_config_override.h
+          cp _this/platformio_override.ini platformio_override.ini
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pioarduino
+        run: pip install pioarduino --break-system-packages 2>/dev/null || pip install pioarduino
+
+      - name: Download safeboot artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tasmota32s3*-safeboot
+          path: ./temp
+
+      - name: Move safeboot binaries into place
+        run: |
+          mkdir -p ./firmware/firmware
+          find ./temp -type f -exec cp -f -t ./firmware/firmware {} +
+
+      - name: Build ${{ matrix.variant }}
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
+        run: platformio run -e ${{ matrix.variant }}
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant }}
+          path: ./build_output
+
+  # ─── 3. Publish GitHub Release ───────────────────────────────────────────
+  release:
+    needs: [check, firmware]
+    if: needs.check.outputs.new_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.check.outputs.tasmota_tag }}
+    steps:
+      - name: Download all firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect & rename binaries
+        run: |
+          mkdir -p dist
+          # Main firmware
+          find artifacts/tasmota32s3    -name '*.bin' ! -name '*safeboot*' \
+            -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.bin \;
+          find artifacts/tasmota32s3ser -name '*.bin' ! -name '*safeboot*' \
+            -exec cp {} dist/tasmota32s3ser-waveshare-8di8ro-${TAG}.bin \;
+          # Safeboot
+          find artifacts/tasmota32s3-safeboot    -name '*.bin' \
+            -exec cp {} dist/tasmota32s3-safeboot-waveshare-8di8ro-${TAG}.bin \;
+          find artifacts/tasmota32s3ser-safeboot -name '*.bin' \
+            -exec cp {} dist/tasmota32s3ser-safeboot-waveshare-8di8ro-${TAG}.bin \;
+          ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: "Tasmota ${{ env.TAG }} – Waveshare ESP32-S3-ETH-8DI-8RO"
+          body: |
+            Auto-built Tasmota firmware for
+            **Waveshare ESP32-S3-ETH-8DI-8RO** and **ESP32-S3-POE-ETH-8DI-8RO**
+            (both boards use the same binary).
+
+            Upstream release: [arendst/Tasmota ${{ env.TAG }}](https://github.com/arendst/Tasmota/releases/tag/${{ env.TAG }})
+
+            ---
+
+            ## Firmware files
+
+            | File | Description |
+            |------|-------------|
+            | `tasmota32s3-waveshare-8di8ro-*.bin` | Main firmware (standard build) |
+            | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
+            | `tasmota32s3ser-waveshare-8di8ro-*.bin` | Main firmware (native USB-CDC serial) |
+            | `tasmota32s3ser-safeboot-waveshare-8di8ro-*.bin` | Safeboot for USB-CDC build |
+
+            ## Flash instructions
+
+            Use [Tasmota Web Installer](https://tasmota.github.io/install/) or:
+            ```bash
+            esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-safeboot-waveshare-8di8ro-*.bin
+            # then OTA-flash the main firmware from the Tasmota web UI
+            ```
+
+            ## First-boot console commands
+
+            ```
+            Template {"NAME":"ESP32S3-POE-ETH-8DI-8RO","GPIO":[40,1,1,1,32,33,34,35,36,37,38,39,5600,704,672,736,5568,1,1,1,1,1,0,0,0,0,0,1376,1,1,608,640,1,1,8864,480,8800,8832],"FLAG":0,"BASE":1}
+            Module 0
+            EthType 8
+            Rule3 on file#tca9554.dat do {"NAME":"TCA9554","GPIO":[224,225,226,227,228,229,230,231]} endon
+            Rule3 1
+            ```
+            Upload `tca9554.dat` (from this repo) via **Consoles → Manage File System**.
+          files: dist/*
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,9 @@
+@echo off
+echo Installing GitHub CLI...
+winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements
+echo.
+echo Refreshing PATH...
+set "PATH=%PATH%;%LOCALAPPDATA%\Microsoft\WinGet\Packages\GitHub.cli_Microsoft.Winget.Source_8wekyb3d8bbwe\tools"
+echo.
+echo Running setup...
+powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0setup.ps1"
