@@ -61,10 +61,12 @@ $ErrorActionPreference = "Continue"
 git commit -m "Initial: user_config_override.h + CI workflow for Waveshare 8DI-8RO" 2>&1 | Out-Null
 $ErrorActionPreference = "Stop"
 
+$ErrorActionPreference = "Continue"
 $remote = git remote get-url origin 2>&1
 if ($LASTEXITCODE -ne 0) {
     git remote add origin "https://github.com/$REPO.git"
 }
+$ErrorActionPreference = "Stop"
 
 Write-Host "[ ] Pushing to GitHub..." -NoNewline
 git push -u origin main --force
