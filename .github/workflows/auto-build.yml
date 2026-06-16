@@ -210,8 +210,9 @@ jobs:
           factory = next(Path("dist").glob("*.factory.bin"))
           data = factory.read_bytes()
           checks = {
-              "bootloader at 0x1000": data[0x1000] == 0xE9,
+              "bootloader at 0x0000": data[0x0000] == 0xE9,
               "partition table at 0x8000": data[0x8000:0x8002] == b"\xAA\x50",
+              "safeboot app at 0x10000": data[0x10000] == 0xE9,
               "app image at 0xE0000": data[0xE0000] == 0xE9,
           }
           failed = [name for name, ok in checks.items() if not ok]
