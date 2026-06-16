@@ -3,7 +3,7 @@ name: Auto-build on new Tasmota release
 on:
   schedule:
     - cron: '0 3 * * 1'   # weekly on Monday at 03:00 UTC
-  workflow_dispatch:        # allow manual trigger
+  workflow_dispatch:        # allow manual rebuild of the current upstream release
 
 permissions:
   contents: write           # needed to create releases
@@ -40,9 +40,14 @@ jobs:
         run: |
           UPSTREAM="${{ steps.upstream.outputs.tag }}"
           OURS="${{ steps.ours.outputs.tag }}"
+          EVENT="${{ github.event_name }}"
           echo "Tasmota latest : $UPSTREAM"
           echo "Our latest     : $OURS"
-          if [ "$UPSTREAM" != "$OURS" ] && [ -n "$UPSTREAM" ]; then
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$UPSTREAM" ]; then
+            echo "Manual rebuild : true"
+            echo "new_release=true"  >> "$GITHUB_OUTPUT"
+            echo "tasmota_tag=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          elif [ "$UPSTREAM" != "$OURS" ] && [ -n "$UPSTREAM" ]; then
             echo "new_release=true"  >> "$GITHUB_OUTPUT"
             echo "tasmota_tag=$UPSTREAM" >> "$GITHUB_OUTPUT"
           else
@@ -184,15 +189,55 @@ jobs:
       - name: Collect & rename binaries
         run: |
           mkdir -p dist
+          FIRMWARE="tasmota32s3-waveshare-8di8ro-${TAG}.bin"
+          FACTORY="tasmota32s3-waveshare-8di8ro-${TAG}.factory.bin"
+          SAFEBOOT="tasmota32s3-safeboot-waveshare-8di8ro-${TAG}.bin"
+          MANIFEST="tasmota32s3-waveshare-8di8ro-${TAG}.manifest.json"
           # Main firmware
           find artifacts/tasmota32s3-waveshare -name '*.bin' ! -name '*.factory.bin' ! -name '*safeboot*' \
-            -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.bin \;
+            -exec cp {} "dist/${FIRMWARE}" \;
           find artifacts/tasmota32s3-waveshare -name '*.factory.bin' \
-            -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.factory.bin \;
+            -exec cp {} "dist/${FACTORY}" \;
           # Safeboot
           find artifacts/tasmota32s3-safeboot -name '*.bin' \
-            -exec cp {} dist/tasmota32s3-safeboot-waveshare-8di8ro-${TAG}.bin \;
+            -exec cp {} "dist/${SAFEBOOT}" \;
           cp _this/tca9554.dat dist/tca9554.dat
+          test -s "dist/${FIRMWARE}"
+          test -s "dist/${FACTORY}"
+          test -s "dist/${SAFEBOOT}"
+          python3 - <<'PY'
+          from pathlib import Path
+          factory = next(Path("dist").glob("*.factory.bin"))
+          data = factory.read_bytes()
+          checks = {
+              "bootloader at 0x1000": data[0x1000] == 0xE9,
+              "partition table at 0x8000": data[0x8000:0x8002] == b"\xAA\x50",
+              "app image at 0xE0000": data[0xE0000] == 0xE9,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit(f"Invalid factory image {factory}: missing {', '.join(failed)}")
+          print(f"Factory image structure OK: {factory}")
+          PY
+          cat > "dist/${MANIFEST}" <<EOF
+          {
+            "name": "Tasmota32-S3 Waveshare 8DI-8RO ${TAG}",
+            "new_install_prompt_erase": true,
+            "new_install_improv_wait_time": 10,
+            "builds": [
+              {
+                "chipFamily": "ESP32-S3",
+                "improv": true,
+                "parts": [
+                  {
+                    "path": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${FACTORY}",
+                    "offset": 0
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
           ls -lh dist/
 
       - name: Create GitHub Release
@@ -216,11 +261,12 @@ jobs:
             | `tasmota32s3-waveshare-8di8ro-*.bin` | Main firmware (standard build) |
             | `tasmota32s3-waveshare-8di8ro-*.factory.bin` | Factory image for initial serial flashing |
             | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
+            | `tasmota32s3-waveshare-8di8ro-*.manifest.json` | ESP Web Tools manifest for browser flashing |
             | `tca9554.dat` | TCA9554 relay mapping file |
 
             ## Flash instructions
 
-            Use [Tasmota Web Installer](https://tasmota.github.io/install/) or:
+            Use [Tasmota Web Installer](https://tasmota.github.io/install/) and upload the `.factory.bin` file, or flash with esptool:
             ```bash
             esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-waveshare-8di8ro-*.factory.bin
             ```
@@ -236,4 +282,5 @@ jobs:
             ```
             Upload `tca9554.dat` (from this repo) via **Consoles → Manage File System**.
           files: dist/*
+          overwrite_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
