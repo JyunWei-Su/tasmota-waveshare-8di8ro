@@ -109,8 +109,8 @@ jobs:
     strategy:
       matrix:
         variant:
-          - tasmota32s3
-          - tasmota32s3ser
+          - tasmota32s3-waveshare
+          - tasmota32s3ser-waveshare
     steps:
       - name: Clone Tasmota ${{ needs.check.outputs.tasmota_tag }}
         uses: actions/checkout@v4
@@ -180,9 +180,9 @@ jobs:
         run: |
           mkdir -p dist
           # Main firmware
-          find artifacts/tasmota32s3    -name '*.bin' ! -name '*safeboot*' \
+          find artifacts/tasmota32s3-waveshare    -name '*.bin' ! -name '*safeboot*' \
             -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.bin \;
-          find artifacts/tasmota32s3ser -name '*.bin' ! -name '*safeboot*' \
+          find artifacts/tasmota32s3ser-waveshare -name '*.bin' ! -name '*safeboot*' \
             -exec cp {} dist/tasmota32s3ser-waveshare-8di8ro-${TAG}.bin \;
           # Safeboot
           find artifacts/tasmota32s3-safeboot    -name '*.bin' \
