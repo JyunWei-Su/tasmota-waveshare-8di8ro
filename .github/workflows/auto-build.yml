@@ -59,7 +59,6 @@ jobs:
       matrix:
         variant:
           - tasmota32s3-safeboot
-          - tasmota32s3ser-safeboot
     steps:
       - name: Clone Tasmota ${{ needs.check.outputs.tasmota_tag }}
         uses: actions/checkout@v4
@@ -110,7 +109,6 @@ jobs:
       matrix:
         variant:
           - tasmota32s3-waveshare
-          - tasmota32s3ser-waveshare
     steps:
       - name: Clone Tasmota ${{ needs.check.outputs.tasmota_tag }}
         uses: actions/checkout@v4
@@ -176,19 +174,25 @@ jobs:
         with:
           path: artifacts
 
+      - name: Checkout release assets
+        uses: actions/checkout@v4
+        with:
+          path: _this
+          sparse-checkout: |
+            tca9554.dat
+
       - name: Collect & rename binaries
         run: |
           mkdir -p dist
           # Main firmware
-          find artifacts/tasmota32s3-waveshare    -name '*.bin' ! -name '*safeboot*' \
+          find artifacts/tasmota32s3-waveshare -name '*.bin' ! -name '*.factory.bin' ! -name '*safeboot*' \
             -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.bin \;
-          find artifacts/tasmota32s3ser-waveshare -name '*.bin' ! -name '*safeboot*' \
-            -exec cp {} dist/tasmota32s3ser-waveshare-8di8ro-${TAG}.bin \;
+          find artifacts/tasmota32s3-waveshare -name '*.factory.bin' \
+            -exec cp {} dist/tasmota32s3-waveshare-8di8ro-${TAG}.factory.bin \;
           # Safeboot
-          find artifacts/tasmota32s3-safeboot    -name '*.bin' \
+          find artifacts/tasmota32s3-safeboot -name '*.bin' \
             -exec cp {} dist/tasmota32s3-safeboot-waveshare-8di8ro-${TAG}.bin \;
-          find artifacts/tasmota32s3ser-safeboot -name '*.bin' \
-            -exec cp {} dist/tasmota32s3ser-safeboot-waveshare-8di8ro-${TAG}.bin \;
+          cp _this/tca9554.dat dist/tca9554.dat
           ls -lh dist/
 
       - name: Create GitHub Release
@@ -210,16 +214,15 @@ jobs:
             | File | Description |
             |------|-------------|
             | `tasmota32s3-waveshare-8di8ro-*.bin` | Main firmware (standard build) |
+            | `tasmota32s3-waveshare-8di8ro-*.factory.bin` | Factory image for initial serial flashing |
             | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
-            | `tasmota32s3ser-waveshare-8di8ro-*.bin` | Main firmware (native USB-CDC serial) |
-            | `tasmota32s3ser-safeboot-waveshare-8di8ro-*.bin` | Safeboot for USB-CDC build |
+            | `tca9554.dat` | TCA9554 relay mapping file |
 
             ## Flash instructions
 
             Use [Tasmota Web Installer](https://tasmota.github.io/install/) or:
             ```bash
-            esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-safeboot-waveshare-8di8ro-*.bin
-            # then OTA-flash the main firmware from the Tasmota web UI
+            esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-waveshare-8di8ro-*.factory.bin
             ```
 
             ## First-boot console commands

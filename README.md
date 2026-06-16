@@ -7,7 +7,7 @@ Custom-compiled [Tasmota](https://tasmota.github.io/) firmware for:
 | Waveshare ESP32-S3-ETH-8DI-8RO | standard Ethernet |
 | Waveshare ESP32-S3-POE-ETH-8DI-8RO | Power-over-Ethernet |
 
-Both variants use **identical firmware** – the only hardware difference is the PoE module.
+Both variants use **identical firmware** - the only hardware difference is the PoE module.
 
 ---
 
@@ -16,22 +16,22 @@ Both variants use **identical firmware** – the only hardware difference is the
 | File | Purpose |
 |------|---------|
 | `user_config_override.h` | Compile-time Tasmota features for this board |
-| `platformio_override.ini` | PlatformIO environments (`tasmota32s3-waveshare`, `tasmota32s3ser-waveshare`) |
-| `tca9554.dat` | TCA9554 relay mapping – upload to Tasmota file system |
+| `platformio_override.ini` | PlatformIO environment (`tasmota32s3-waveshare`) |
+| `tca9554.dat` | TCA9554 relay mapping - upload to Tasmota file system |
 | `.github/workflows/auto-build.yml` | Daily release automation |
 
 ---
 
 ## Releases
 
-The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream Tasmota releases every day at 03:00 UTC. When a new version is found, it compiles two variants and publishes a [GitHub Release](../../releases):
+The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream Tasmota releases every day at 03:00 UTC. When a new version is found, it compiles the Waveshare ESP32-S3 build and publishes a [GitHub Release](../../releases):
 
 | Binary | Notes |
 |--------|-------|
 | `tasmota32s3-waveshare-8di8ro-*.bin` | Standard build |
+| `tasmota32s3-waveshare-8di8ro-*.factory.bin` | Factory image for initial serial flashing |
 | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
-| `tasmota32s3ser-waveshare-8di8ro-*.bin` | Native USB-CDC serial build |
-| `tasmota32s3ser-safeboot-waveshare-8di8ro-*.bin` | Safeboot for USB-CDC build |
+| `tca9554.dat` | TCA9554 relay mapping file |
 
 ---
 
@@ -39,20 +39,18 @@ The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream
 
 ### Initial flash (esptool)
 ```bash
-# 1. Flash safeboot
-esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-safeboot-waveshare-8di8ro-*.bin
-
-# 2. OTA-upload main firmware from Tasmota web UI → Firmware Upgrade
+# Flash factory image
+esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-waveshare-8di8ro-*.factory.bin
 ```
 
 ### Update via OTA
-Upload `tasmota32s3-waveshare-8di8ro-*.bin` through **Tasmota web UI → Firmware Upgrade**.
+Upload `tasmota32s3-waveshare-8di8ro-*.bin` through **Tasmota web UI -> Firmware Upgrade**.
 
 ---
 
 ## First-boot setup
 
-Paste each command into **Consoles → Console**:
+Paste each command into **Consoles -> Console**:
 
 ```
 # 1. Apply template
@@ -78,7 +76,7 @@ BuzzerPwm 1
 
 After `Module 0`, Tasmota restarts. Reconnect, then run the remaining commands.
 
-Upload `tca9554.dat` via **Consoles → Manage File System** before enabling Rule3.
+Upload `tca9554.dat` via **Consoles -> Manage File System** before enabling Rule3.
 
 ---
 
@@ -87,15 +85,15 @@ Upload `tca9554.dat` via **Consoles → Manage File System** before enabling Rul
 | Feature | Detail |
 |---------|--------|
 | MCU | ESP32-S3-WROOM-1U-N16R8 (16 MB Flash, 8 MB OPI PSRAM) |
-| Ethernet | W5500 SPI — CLK:GPIO15 MOSI:GPIO13 MISO:GPIO14 CS:GPIO16 INT:GPIO12 |
-| I²C | SCL:GPIO41 SDA:GPIO42 |
-| Relay expander | TCA9554 @ 0x20 (8 relays, COM+NO+NC, ≤10 A 250 VAC) |
-| Digital inputs | GPIO4–GPIO11 (optocoupler-isolated, active-low) |
+| Ethernet | W5500 SPI - CLK:GPIO15 MOSI:GPIO13 MISO:GPIO14 CS:GPIO16 INT:GPIO12 |
+| I2C | SCL:GPIO41 SDA:GPIO42 |
+| Relay expander | TCA9554 @ 0x20 (8 relays, COM+NO+NC, <=10 A 250 VAC) |
+| Digital inputs | GPIO4-GPIO11 (optocoupler-isolated, active-low) |
 | RTC | PCF85063 @ 0x51 |
 | RGB LED | WS2812 on GPIO38 |
 | Buzzer | GPIO46 (PWM) |
 | RS-485 | TX:GPIO17 RX:GPIO18 |
-| Power | 7–36 V DC screw terminal **or** USB-C (5 V) |
+| Power | 7-36 V DC screw terminal **or** USB-C (5 V) |
 | PoE | 802.3af/at on POE variant |
 
 ---
@@ -115,5 +113,5 @@ platformio run -e tasmota32s3-waveshare
 
 ## Credits
 
-- Template and TCA9554 driver by [@arendst](https://github.com/arendst) — [Tasmota discussion #24205](https://github.com/arendst/Tasmota/discussions/24205)
+- Template and TCA9554 driver by [@arendst](https://github.com/arendst) - [Tasmota discussion #24205](https://github.com/arendst/Tasmota/discussions/24205)
 - ESPHome pin map: [devices.esphome.io](https://devices.esphome.io/devices/waveshare-esp32-s3-eth-8di-8ro/)
