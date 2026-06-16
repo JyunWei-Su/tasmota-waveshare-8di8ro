@@ -193,6 +193,7 @@ jobs:
           FACTORY="tasmota32s3-waveshare-8di8ro-${TAG}.factory.bin"
           SAFEBOOT="tasmota32s3-safeboot-waveshare-8di8ro-${TAG}.bin"
           MANIFEST="tasmota32s3-waveshare-8di8ro-${TAG}.manifest.json"
+          INSTALLER="tasmota32s3-waveshare-8di8ro-${TAG}.install.html"
           # Main firmware
           find artifacts/tasmota32s3-waveshare -name '*.bin' ! -name '*.factory.bin' ! -name '*safeboot*' \
             -exec cp {} "dist/${FIRMWARE}" \;
@@ -210,8 +211,11 @@ jobs:
           factory = next(Path("dist").glob("*.factory.bin"))
           data = factory.read_bytes()
           checks = {
-              "bootloader at 0x0000": data[0x0000] == 0xE9,
+              # ESP32-S3 merged images start with the bootloader image header at
+              # offset 0. 0x1000 is only the legacy ESP32 bootloader start.
+              "ESP32-S3 bootloader image at 0x0000": data[0x0000] == 0xE9,
               "partition table at 0x8000": data[0x8000:0x8002] == b"\xAA\x50",
+              "boot_app0 marker at 0xE000": data[0xE000] == 0x01,
               "safeboot app at 0x10000": data[0x10000] == 0xE9,
               "app image at 0xE0000": data[0xE0000] == 0xE9,
           }
@@ -220,9 +224,11 @@ jobs:
               raise SystemExit(f"Invalid factory image {factory}: missing {', '.join(failed)}")
           print(f"Factory image structure OK: {factory}")
           PY
+          FACTORY_SIZE=$(stat -c%s "dist/${FACTORY}")
           cat > "dist/${MANIFEST}" <<EOF
           {
             "name": "Tasmota32-S3 Waveshare 8DI-8RO ${TAG}",
+            "version": "${TAG}",
             "new_install_prompt_erase": true,
             "new_install_improv_wait_time": 10,
             "builds": [
@@ -232,12 +238,41 @@ jobs:
                 "parts": [
                   {
                     "path": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${FACTORY}",
-                    "offset": 0
+                    "offset": 0,
+                    "size": ${FACTORY_SIZE}
                   }
                 ]
               }
             ]
           }
+          EOF
+          cat > "dist/${INSTALLER}" <<EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Tasmota32-S3 Waveshare 8DI-8RO ${TAG}</title>
+              <script
+                type="module"
+                src="https://unpkg.com/tasmota-esp-web-tools@12.2.2/dist/web/install-button.js?module">
+              </script>
+              <style>
+                body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
+                code { background: #f4f4f4; padding: 0.1rem 0.25rem; border-radius: 0.2rem; }
+              </style>
+            </head>
+            <body>
+              <h1>Tasmota32-S3 Waveshare 8DI-8RO ${TAG}</h1>
+              <p>This installer flashes the release factory image through ESP Web Tools.</p>
+              <esp-web-install-button
+                manifest="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${MANIFEST}"
+                baud-rate="2000000">
+                <button slot="activate">Connect</button>
+              </esp-web-install-button>
+              <p>Factory image: <code>${FACTORY}</code></p>
+            </body>
+          </html>
           EOF
           ls -lh dist/
 
@@ -263,11 +298,16 @@ jobs:
             | `tasmota32s3-waveshare-8di8ro-*.factory.bin` | Factory image for initial serial flashing |
             | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
             | `tasmota32s3-waveshare-8di8ro-*.manifest.json` | ESP Web Tools manifest for browser flashing |
+            | `tasmota32s3-waveshare-8di8ro-*.install.html` | Standalone ESP Web Tools installer page |
             | `tca9554.dat` | TCA9554 relay mapping file |
 
             ## Flash instructions
 
-            Use [Tasmota Web Installer](https://tasmota.github.io/install/) and upload the `.factory.bin` file, or flash with esptool:
+            Use the `.install.html` asset from this release, or use [Tasmota Web Installer](https://tasmota.github.io/install/) and its **Upload factory.bin** button to select the downloaded `.factory.bin` file locally.
+
+            Do not paste the GitHub release asset URL into the Tasmota installer. URL-based flashing should use the `.manifest.json` file through ESP Web Tools.
+
+            Serial flashing with esptool:
             ```bash
             esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-waveshare-8di8ro-*.factory.bin
             ```

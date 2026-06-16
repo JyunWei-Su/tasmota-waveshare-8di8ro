@@ -32,6 +32,7 @@ The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream
 | `tasmota32s3-waveshare-8di8ro-*.factory.bin` | Factory image for initial serial flashing |
 | `tasmota32s3-safeboot-waveshare-8di8ro-*.bin` | Safeboot for standard build |
 | `tasmota32s3-waveshare-8di8ro-*.manifest.json` | ESP Web Tools manifest for browser flashing |
+| `tasmota32s3-waveshare-8di8ro-*.install.html` | Standalone ESP Web Tools installer page |
 | `tca9554.dat` | TCA9554 relay mapping file |
 
 ---
@@ -45,8 +46,9 @@ esptool.py --chip esp32s3 write_flash 0x0 tasmota32s3-waveshare-8di8ro-*.factory
 ```
 
 ### Initial flash (browser)
-Use [Tasmota Web Installer](https://tasmota.github.io/install/) and upload the `.factory.bin` file.
-The release also includes a `.manifest.json` file for ESP Web Tools compatible URL-based flashing.
+Use the release `.install.html` page, or use [Tasmota Web Installer](https://tasmota.github.io/install/) and its **Upload factory.bin** button to select the downloaded `.factory.bin` file locally.
+
+Do not paste the GitHub release asset URL into the Tasmota installer. URL-based flashing should use the release `.manifest.json` file through ESP Web Tools.
 
 ### Update via OTA
 Upload `tasmota32s3-waveshare-8di8ro-*.bin` through **Tasmota web UI -> Firmware Upgrade**.
