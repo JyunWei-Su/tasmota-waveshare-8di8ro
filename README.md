@@ -18,13 +18,13 @@ Both variants use **identical firmware** - the only hardware difference is the P
 | `user_config_override.h` | Compile-time Tasmota features for this board |
 | `platformio_override.ini` | PlatformIO environment (`tasmota32s3-waveshare`) |
 | `tca9554.dat` | TCA9554 relay mapping - upload to Tasmota file system |
-| `.github/workflows/auto-build.yml` | Daily release automation |
+| `.github/workflows/auto-build.yml` | Weekly release automation |
 
 ---
 
 ## Releases
 
-The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream Tasmota releases every day at 03:00 UTC. When a new version is found, it compiles the Waveshare ESP32-S3 build and publishes a [GitHub Release](../../releases):
+The [Actions workflow](.github/workflows/auto-build.yml) checks for new upstream Tasmota releases every Monday at 03:00 UTC. When a new version is found, it compiles the Waveshare ESP32-S3 build and publishes a [GitHub Release](../../releases):
 
 | Binary | Notes |
 |--------|-------|
